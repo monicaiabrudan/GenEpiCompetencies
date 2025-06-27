@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+import altair as alt
 
 st.set_page_config(page_title="Competency Comparison", layout="wide")
 st.title("📊 Competency Level Comparison Across Files")
@@ -8,6 +8,7 @@ st.title("📊 Competency Level Comparison Across Files")
 # Define Bloom's level ranking for comparison
 bloom_levels = ['Unfamiliar', 'Remember', 'Understand', 'Apply', 'Analyse', 'Evaluate', 'Create']
 bloom_rank = {level: i for i, level in enumerate(bloom_levels)}
+reverse_bloom_rank = {i: level for level, i in bloom_rank.items()}
 
 # Upload each file individually
 file1 = st.file_uploader("Upload File 1", type="csv", key="file1")
@@ -31,26 +32,21 @@ if file1 and file2 and file3:
     chart_data = pd.melt(merged, id_vars=['Topic'], value_vars=['File 1', 'File 2', 'File 3'], 
                          var_name='File', value_name='Bloom Level')
     chart_data['Bloom Index'] = chart_data['Bloom Level'].map(bloom_rank)
+    chart_data['Bloom Label'] = chart_data['Bloom Index'].map(reverse_bloom_rank)
 
-    # Plot grouped bar chart
+    # Plot grouped bar chart using Altair with Bloom's levels on Y-axis and full Topic on X-axis
     st.markdown("### 📊 Bloom's Level Comparison (Grouped Bar Chart)")
-    fig, ax = plt.subplots(figsize=(14, max(6, len(merged) * 0.4)))
-    topics = chart_data['Topic'].unique()
-    x = range(len(topics))
-    width = 0.25
-    colors = ['#99cfff', '#3399ff', '#0055aa']  # Three shades of blue
+    chart = alt.Chart(chart_data).mark_bar().encode(
+        x=alt.X('Topic:N', sort=None, axis=alt.Axis(labelAngle=90, labelLimit=500)),
+        y=alt.Y('Bloom Index:Q', scale=alt.Scale(domain=[-0.5, 6.5]), title="Bloom's Level",
+               axis=alt.Axis(values=list(reverse_bloom_rank.keys()), 
+                             labelExpr='{"0": "Unfamiliar", "1": "Remember", "2": "Understand", "3": "Apply", "4": "Analyse", "5": "Evaluate", "6": "Create"}[datum.label]')),
+        color=alt.Color('File:N', scale=alt.Scale(range=['#99cfff', '#3399ff', '#0055aa'])),
+        tooltip=['Topic', 'File', 'Bloom Level'],
+        xOffset='File:N'
+    ).properties(width=1000, height=600).configure_axis(labelFontSize=12).configure_view(stroke=None)
 
-    for i, (file, color) in enumerate(zip(['File 1', 'File 2', 'File 3'], colors)):
-        values = [chart_data[(chart_data['Topic'] == topic) & (chart_data['File'] == file)]['Bloom Index'].values[0] for topic in topics]
-        ax.bar([pos + i * width for pos in x], values, width=width, label=file, color=color)
-
-    ax.set_xticks([pos + width for pos in x])
-    ax.set_xticklabels(topics, rotation=45, ha='right')
-    ax.set_ylabel("Bloom's Level")
-    ax.set_yticks(range(len(bloom_levels)))
-    ax.set_yticklabels(bloom_levels)
-    ax.legend()
-    st.pyplot(fig)
+    st.altair_chart(chart, use_container_width=True)
 
     # Download option
     csv = merged.to_csv(index=False)
